@@ -15,27 +15,63 @@ jobs:
       # Step 1: run a standard checkout action
       - name: Checkout target repo
         uses: actions/checkout@v4
-      # Step 2: run the sync action
-      - name: Sync upstream changes
-        id: sync
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
         with:
-          upstream_sync_repo: LunaTechLab/MoonTV
-          upstream_sync_branch: main
-          target_sync_branch: main
-          target_repo_token: ${{ secrets.GITHUB_TOKEN }}
-      # Step 3: Revert workflow file changes to prevent pushing them back
-      - name: Revert workflow changes
-        if: steps.sync.outputs.has_new_commits == 'true'
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      # Step 2: Add upstream remote and fetch
+      - name: Add upstream remote and fetch
         run: |
-          echo "Reverting any changes to .github/workflows to prevent workflow conflicts"
-          git restore --staged .github/workflows || true
-          git checkout -- .github/workflows || true
-          echo "Workflow files have been reverted to maintain sync stability"
+          git remote add upstream https://github.com/LunaTechLab/MoonTV.git
+          git fetch upstream
+          echo "Fetched upstream changes"
+      
+      # Step 3: Selective sync excluding .github/workflows
+      - name: Selective sync from upstream
+        run: |
+          echo "Starting selective sync process"
+          
+          # Create a temporary directory for upstream files
+          mkdir -p /tmp/upstream-sync
+          
+          # Checkout upstream/main to temp directory
+          git --git-dir=.git --work-tree=/tmp/upstream-sync checkout upstream/main -- .
+          
+          # Remove .github/workflows from temp directory to exclude them
+          rm -rf /tmp/upstream-sync/.github/workflows
+          
+          # Copy non-workflow changes to working tree (excluding .git and .github/workflows)
+          rsync -av --exclude='.git' --exclude='.github/workflows' /tmp/upstream-sync/ ./
+          
+          # Stage all changes
+          git add .
+          
+          # Check if there are any changes to commit
+          if git diff --cached --quiet; then
+            echo "No changes to sync from upstream"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes found, proceeding with commit"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            
+            # Commit the changes
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git commit -m "chore(sync): update from upstream (exclude workflows)"
+            
+            # Push the changes
+            git push origin main
+            echo "Successfully pushed selective sync changes"
+          fi
+          
+          # Cleanup
+          rm -rf /tmp/upstream-sync
+      
       - name: Sync check
-        if: always()
         run: |
-          echo "[Warning] If there are upstream workflow changes, manual sync may be needed."
+          echo "Selective sync completed successfully"
+          echo "[Info] Workflow files (.github/workflows) are excluded from sync to prevent conflicts"
+      
       - name: Delete workflow runs
         uses: Mattraks/delete-workflow-runs@main
         with:
