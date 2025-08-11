@@ -24,6 +24,14 @@ jobs:
           upstream_sync_branch: main
           target_sync_branch: main
           target_repo_token: ${{ secrets.GITHUB_TOKEN }}
+      # Step 3: Revert workflow file changes to prevent pushing them back
+      - name: Revert workflow changes
+        if: steps.sync.outputs.has_new_commits == 'true'
+        run: |
+          echo "Reverting any changes to .github/workflows to prevent workflow conflicts"
+          git restore --staged .github/workflows || true
+          git checkout -- .github/workflows || true
+          echo "Workflow files have been reverted to maintain sync stability"
       - name: Sync check
         if: always()
         run: |
