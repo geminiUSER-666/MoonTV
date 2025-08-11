@@ -1,25 +1,20 @@
 name: Upstream Sync
-
 on:
   schedule:
-    - cron: "0 */6 * * *" # run every 6 hours
+    - cron: "0 3 * * *" # run daily at 03:00 UTC
   workflow_dispatch:
-
 permissions:
   contents: write
   actions: write
-
 jobs:
   sync_latest_from_upstream:
     name: Sync latest commits from upstream repo
     runs-on: ubuntu-latest
     if: ${{ github.event.repository.fork }}
-
     steps:
       # Step 1: run a standard checkout action
       - name: Checkout target repo
         uses: actions/checkout@v4
-
       # Step 2: run the sync action
       - name: Sync upstream changes
         id: sync
@@ -29,13 +24,10 @@ jobs:
           upstream_sync_branch: main
           target_sync_branch: main
           target_repo_token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Sync check
-        if: failure()
+        if: always()
         run: |
-          echo "[Error] Due to a change in the workflow file of the upstream repository, GitHub has automatically suspended the scheduled automatic update. You need to manually sync your fork."
-          exit 1
-
+          echo "[Warning] If there are upstream workflow changes, manual sync may be needed."
       - name: Delete workflow runs
         uses: Mattraks/delete-workflow-runs@main
         with:
